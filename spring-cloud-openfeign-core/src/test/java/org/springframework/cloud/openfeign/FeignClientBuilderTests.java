@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the original author or authors.
+ * Copyright 2013-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,11 +101,11 @@ public class FeignClientBuilderTests {
 	public void forType_preinitializedBuilder() {
 		// when:
 		final FeignClientBuilder.Builder builder = this.feignClientBuilder
-				.forType(FeignClientBuilderTests.class, "TestClient");
+				.forType(TestFeignClient.class, "TestClient");
 
 		// then:
 		assertFactoryBeanField(builder, "applicationContext", this.applicationContext);
-		assertFactoryBeanField(builder, "type", FeignClientBuilderTests.class);
+		assertFactoryBeanField(builder, "type", TestFeignClient.class);
 		assertFactoryBeanField(builder, "name", "TestClient");
 		assertFactoryBeanField(builder, "contextId", "TestClient");
 
@@ -126,21 +126,40 @@ public class FeignClientBuilderTests {
 	public void forType_allFieldsSetOnBuilder() {
 		// when:
 		final FeignClientBuilder.Builder builder = this.feignClientBuilder
-				.forType(FeignClientBuilderTests.class, "TestClient").decode404(true)
-				.fallback(Object.class).fallbackFactory(Object.class).path("Path/")
-				.url("Url/");
+				.forType(TestFeignClient.class, "TestClient").decode404(true).url("Url/")
+				.path("/Path").contextId("TestContext");
 
 		// then:
 		assertFactoryBeanField(builder, "applicationContext", this.applicationContext);
-		assertFactoryBeanField(builder, "type", FeignClientBuilderTests.class);
+		assertFactoryBeanField(builder, "type", TestFeignClient.class);
 		assertFactoryBeanField(builder, "name", "TestClient");
+		assertFactoryBeanField(builder, "contextId", "TestContext");
 
 		// and:
 		assertFactoryBeanField(builder, "url", "http://Url/");
 		assertFactoryBeanField(builder, "path", "/Path");
 		assertFactoryBeanField(builder, "decode404", true);
-		assertFactoryBeanField(builder, "fallback", Object.class);
-		assertFactoryBeanField(builder, "fallbackFactory", Object.class);
+
+	}
+
+	@Test
+	public void forType_clientFactoryBeanProvided() {
+		// when:
+		final FeignClientBuilder.Builder builder = this.feignClientBuilder
+				.forType(TestFeignClient.class, new FeignClientFactoryBean(),
+						"TestClient")
+				.decode404(true).path("Path/").url("Url/").contextId("TestContext");
+
+		// then:
+		assertFactoryBeanField(builder, "applicationContext", this.applicationContext);
+		assertFactoryBeanField(builder, "type", TestFeignClient.class);
+		assertFactoryBeanField(builder, "name", "TestClient");
+		assertFactoryBeanField(builder, "contextId", "TestContext");
+
+		// and:
+		assertFactoryBeanField(builder, "url", "http://Url/");
+		assertFactoryBeanField(builder, "path", "/Path");
+		assertFactoryBeanField(builder, "decode404", true);
 	}
 
 	@Test
@@ -157,6 +176,10 @@ public class FeignClientBuilderTests {
 		// unusual exception'
 		this.thrown.expect(Matchers.isA(ClosedFileSystemException.class));
 		builder.build();
+	}
+
+	private interface TestFeignClient {
+
 	}
 
 }

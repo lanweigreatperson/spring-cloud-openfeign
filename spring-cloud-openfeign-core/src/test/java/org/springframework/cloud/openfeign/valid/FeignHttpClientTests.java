@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the original author or authors.
+ * Copyright 2013-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ package org.springframework.cloud.openfeign.valid;
 
 import java.util.Objects;
 
-import com.netflix.loadbalancer.Server;
-import com.netflix.loadbalancer.ServerList;
 import feign.Client;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -29,16 +27,17 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.web.server.LocalServerPort;
-import org.springframework.cloud.netflix.ribbon.RibbonClient;
-import org.springframework.cloud.netflix.ribbon.RibbonClients;
-import org.springframework.cloud.netflix.ribbon.StaticServerList;
+import org.springframework.cloud.loadbalancer.annotation.LoadBalancerClient;
+import org.springframework.cloud.loadbalancer.annotation.LoadBalancerClients;
+import org.springframework.cloud.loadbalancer.core.ServiceInstanceListSupplier;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.cloud.openfeign.FeignClient;
-import org.springframework.cloud.openfeign.ribbon.LoadBalancerFeignClient;
+import org.springframework.cloud.openfeign.loadbalancer.FeignBlockingLoadBalancerClient;
 import org.springframework.cloud.openfeign.test.NoSecurityConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.annotation.DirtiesContext;
@@ -56,9 +55,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Spencer Gibb
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest(classes = FeignHttpClientTests.Application.class, webEnvironment = WebEnvironment.RANDOM_PORT, value = {
-		"spring.application.name=feignclienttest", "feign.hystrix.enabled=false",
-		"feign.okhttp.enabled=false" })
+@SpringBootTest(classes = FeignHttpClientTests.Application.class,
+		webEnvironment = WebEnvironment.RANDOM_PORT,
+		value = { "spring.application.name=feignclienttest",
+				"feign.hystrix.enabled=false", "feign.okhttp.enabled=false" })
 @DirtiesContext
 public class FeignHttpClientTests {
 
@@ -92,8 +92,8 @@ public class FeignHttpClientTests {
 
 	@Test
 	public void testFeignClientType() throws IllegalAccessException {
-		assertThat(this.feignClient).isInstanceOf(LoadBalancerFeignClient.class);
-		LoadBalancerFeignClient client = (LoadBalancerFeignClient) this.feignClient;
+		assertThat(this.feignClient).isInstanceOf(FeignBlockingLoadBalancerClient.class);
+		FeignBlockingLoadBalancerClient client = (FeignBlockingLoadBalancerClient) this.feignClient;
 		Client delegate = client.getDelegate();
 		assertThat(delegate).isInstanceOf(feign.httpclient.ApacheHttpClient.class);
 	}
@@ -113,17 +113,20 @@ public class FeignHttpClientTests {
 
 	protected interface BaseTestClient {
 
-		@RequestMapping(method = RequestMethod.GET, value = "/hello", produces = MediaType.APPLICATION_JSON_VALUE)
+		@RequestMapping(method = RequestMethod.GET, value = "/hello",
+				produces = MediaType.APPLICATION_JSON_VALUE)
 		Hello getHello();
 
-		@RequestMapping(method = RequestMethod.PATCH, value = "/hellop", consumes = "application/json")
+		@RequestMapping(method = RequestMethod.PATCH, value = "/hellop",
+				consumes = "application/json")
 		ResponseEntity<Void> patchHello(Hello hello);
 
 	}
 
 	protected interface UserService {
 
-		@RequestMapping(method = RequestMethod.GET, value = "/users/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+		@RequestMapping(method = RequestMethod.GET, value = "/users/{id}",
+				produces = MediaType.APPLICATION_JSON_VALUE)
 		User getUser(@PathVariable("id") long id);
 
 	}
@@ -133,13 +136,15 @@ public class FeignHttpClientTests {
 
 	}
 
-	@Configuration
+	@Configuration(proxyBeanMethods = false)
 	@EnableAutoConfiguration
 	@RestController
 	@EnableFeignClients(clients = { TestClient.class, UserClient.class })
-	@RibbonClients({
-			@RibbonClient(name = "localapp", configuration = LocalRibbonClientConfiguration.class),
-			@RibbonClient(name = "localapp1", configuration = LocalRibbonClientConfiguration.class) })
+	@LoadBalancerClients({
+			@LoadBalancerClient(name = "localapp",
+					configuration = LocalClientConfiguration.class),
+			@LoadBalancerClient(name = "localapp1",
+					configuration = LocalClientConfiguration.class) })
 	@Import(NoSecurityConfiguration.class)
 	protected static class Application implements UserService {
 
@@ -246,15 +251,16 @@ public class FeignHttpClientTests {
 	}
 
 	// Load balancer with fixed server list for "local" pointing to localhost
-	@Configuration
-	static class LocalRibbonClientConfiguration {
+	@Configuration(proxyBeanMethods = false)
+	static class LocalClientConfiguration {
 
 		@LocalServerPort
 		private int port = 0;
 
 		@Bean
-		public ServerList<Server> ribbonServerList() {
-			return new StaticServerList<>(new Server("localhost", this.port));
+		public ServiceInstanceListSupplier staticServiceInstanceListSupplier(
+				Environment env) {
+			return ServiceInstanceListSupplier.fixed(env).instance(port, "local").build();
 		}
 
 	}

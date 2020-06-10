@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the original author or authors.
+ * Copyright 2013-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,8 +39,9 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
  * @author Charlie Mordant.
  */
 @RunWith(SpringJUnit4ClassRunner.class)
-@SpringBootTest(classes = SpringEncoderTests.Application.class, webEnvironment = RANDOM_PORT, value = {
-		"spring.application.name=springencodertest", "spring.jmx.enabled=false" })
+@SpringBootTest(classes = SpringEncoderTests.Application.class,
+		webEnvironment = RANDOM_PORT, value = {
+				"spring.application.name=springencodertest", "spring.jmx.enabled=false" })
 @DirtiesContext
 public class PageableEncoderTests {
 
@@ -63,13 +64,13 @@ public class PageableEncoderTests {
 		encoder.encode(createPageAndSortRequest(), null, request);
 
 		// Request queries shall contain three entries
-		assertThat(request.queries().size()).isEqualTo(3);
+		assertThat(request.queries()).hasSize(3);
 		// Request page shall contain page
 		assertThat(request.queries().get("page")).contains(String.valueOf(PAGE));
 		// Request size shall contain size
 		assertThat(request.queries().get("size")).contains(String.valueOf(SIZE));
 		// Request sort size shall contain sort entries
-		assertThat(request.queries().get("sort").size()).isEqualTo(2);
+		assertThat(request.queries().get("sort")).hasSize(2);
 	}
 
 	private Pageable createPageAndSortRequest() {
@@ -88,7 +89,7 @@ public class PageableEncoderTests {
 		// Request size shall contain size
 		assertThat(request.queries().get("size")).contains(String.valueOf(SIZE));
 		// Request sort size shall contain sort entries
-		assertThat(request.queries().containsKey("sort")).isEqualTo(false);
+		assertThat(request.queries()).doesNotContainKey("sort");
 	}
 
 	private Pageable createPageAndRequest() {
@@ -105,11 +106,22 @@ public class PageableEncoderTests {
 		// Request queries shall contain three entries
 		assertThat(request.queries().size()).isEqualTo(1);
 		// Request sort size shall contain sort entries
-		assertThat(request.queries().get("sort").size()).isEqualTo(2);
+		assertThat(request.queries().get("sort")).hasSize(2);
 	}
 
 	private Sort createSort() {
 		return Sort.by(SORT_1, SORT_2).ascending();
+	}
+
+	@Test
+	public void testUnpagedRequest() {
+		Encoder encoder = this.context.getInstance("foo", Encoder.class);
+		assertThat(encoder).isNotNull();
+		RequestTemplate request = new RequestTemplate();
+
+		encoder.encode(Pageable.unpaged(), null, request);
+		// Request queries shall contain three entries
+		assertThat(request.queries()).isEmpty();
 	}
 
 }

@@ -1,11 +1,5 @@
-:github-tag: master
-:github-repo: spring-cloud/spring-cloud-openfeign
-:github-raw: https://raw.github.com/{github-repo}/{github-tag}
-:github-code: https://github.com/{github-repo}/tree/{github-tag}
-:all: {asterisk}{asterisk}
-:nofooter:
-:branch: master
 = Spring Cloud OpenFeign
+include::_attributes.adoc[]
 
 *{spring-cloud-version}*
 
@@ -15,7 +9,13 @@ include::intro.adoc[]
 [[spring-cloud-feign]]
 == Declarative REST Client: Feign
 
-https://github.com/Netflix/feign[Feign] is a declarative web service client.  It makes writing web service clients easier.  To use Feign create an interface and annotate it.  It has pluggable annotation support including Feign annotations and JAX-RS annotations. Feign also supports pluggable encoders and decoders.  Spring Cloud adds support for Spring MVC annotations and for using the same `HttpMessageConverters` used by default in Spring Web.  Spring Cloud integrates Ribbon and Eureka to provide a load balanced http client when using Feign.
+https://github.com/OpenFeign/feign[Feign] is a declarative web service client.
+It makes writing web service clients easier.
+To use Feign create an interface and annotate it.
+It has pluggable annotation support including Feign annotations and JAX-RS annotations.
+Feign also supports pluggable encoders and decoders.
+Spring Cloud adds support for Spring MVC annotations and for using the same `HttpMessageConverters` used by default in Spring Web.
+Spring Cloud integrates Eureka, as well as Spring Cloud LoadBalancer to provide a load-balanced http client when using Feign.
 
 [[netflix-feign-starter]]
 === How to Include Feign
@@ -47,26 +47,26 @@ public interface StoreClient {
     @RequestMapping(method = RequestMethod.GET, value = "/stores")
     List<Store> getStores();
 
+    @RequestMapping(method = RequestMethod.GET, value = "/stores")
+    Page<Store> getStores(Pageable pageable);
+
     @RequestMapping(method = RequestMethod.POST, value = "/stores/{storeId}", consumes = "application/json")
     Store update(@PathVariable("storeId") Long storeId, Store store);
 }
 ----
 
-In the `@FeignClient` annotation the String value ("stores" above) is
-an arbitrary client name, which is used to create a Ribbon load
-balancer (see <<spring-cloud-ribbon,below for details of Ribbon
-support>>). You can also specify a URL using the `url` attribute
+In the `@FeignClient` annotation the String value ("stores" above) is an arbitrary client name, which is used to create a https://github.com/spring-cloud/spring-cloud-commons/blob/master/spring-cloud-loadbalancer/src/main/java/org/springframework/cloud/loadbalancer/blocking/client/BlockingLoadBalancerClient.java[Spring Cloud LoadBalancer client].
+You can also specify a URL using the `url` attribute
 (absolute value or just a hostname). The name of the bean in the
 application context is the fully qualified name of the interface.
 To specify your own alias value you can use the `qualifier` value
 of the `@FeignClient` annotation.
 
-The Ribbon client above will want to discover the physical addresses
+The load-balancer client above will want to discover the physical addresses
 for the "stores" service. If your application is a Eureka client then
 it will resolve the service in the Eureka service registry. If you
 don't want to use Eureka, you can simply configure a list of servers
-in your external configuration (see
-<<spring-cloud-ribbon-without-eureka,above for example>>).
+in your external configuration using https://cloud.spring.io/spring-cloud-static/spring-cloud-commons/current/reference/html/#simplediscoveryclient[`SimpleDiscoveryClient`].
 
 [[spring-cloud-feign-overriding-defaults]]
 === Overriding Feign Defaults
@@ -108,19 +108,22 @@ public interface StoreClient {
 }
 ----
 
-Spring Cloud Netflix provides the following beans by default for feign (`BeanType` beanName: `ClassName`):
+Spring Cloud OpenFeign provides the following beans by default for feign (`BeanType` beanName: `ClassName`):
 
 * `Decoder` feignDecoder: `ResponseEntityDecoder` (which wraps a `SpringDecoder`)
 * `Encoder` feignEncoder: `SpringEncoder`
 * `Logger` feignLogger: `Slf4jLogger`
 * `Contract` feignContract: `SpringMvcContract`
 * `Feign.Builder` feignBuilder: `HystrixFeign.Builder`
-* `Client` feignClient: if Ribbon is enabled it is a `LoadBalancerFeignClient`, otherwise the default feign client is used.
+* `Client` feignClient: if Spring Cloud LoadBalancer is in the classpath, `FeignBlockingLoadBalancerClient` is used.
+If none of them is in the classpath, the default feign client is used.
+
+NOTE: `spring-cloud-starter-openfeign` supports `spring-cloud-starter-loadbalancer`. However, as is an optional dependency, you need to make sure it been added to your project if you want to use it.
 
 The OkHttpClient and ApacheHttpClient feign clients can be used by setting `feign.okhttp.enabled` or `feign.httpclient.enabled` to `true`, respectively, and having them on the classpath.
-You can customize the HTTP client used by providing a bean of either `ClosableHttpClient` when using Apache or `OkHttpClient` when using OK HTTP.
+You can customize the HTTP client used by providing a bean of either `org.apache.http.impl.client.CloseableHttpClient` when using Apache or `okhttp3.OkHttpClient` when using OK HTTP.
 
-Spring Cloud Netflix _does not_ provide the following beans by default for feign, but still looks up beans of these types from the application context to create the feign client:
+Spring Cloud OpenFeign _does not_ provide the following beans by default for feign, but still looks up beans of these types from the application context to create the feign client:
 
 * `Logger.Level`
 * `Retryer`
@@ -128,6 +131,11 @@ Spring Cloud Netflix _does not_ provide the following beans by default for feign
 * `Request.Options`
 * `Collection<RequestInterceptor>`
 * `SetterFactory`
+* `QueryMapEncoder`
+
+A bean of `Retryer.NEVER_RETRY` with the type `Retryer` is created by default, which will disable retrying.
+Notice this retrying behavior is different from the Feign default one, where it will automatically retry IOExceptions,
+treating them as transient network related exceptions, and any RetryableException thrown from an ErrorDecoder.
 
 Creating a bean of one of those type and placing it in a `@FeignClient` configuration (such as `FooConfiguration` above) allows you to override each one of the beans described.  Example:
 
@@ -233,6 +241,29 @@ public interface BarClient {
 }
 ----
 
+It is also possible to configure FeignClient not to inherit beans from the parent context.
+You can do this by overriding the `inheritParentConfiguration()` in a  `FeignClientConfigurer`
+bean to return `false`:
+
+[source,java,indent=0]
+----
+@Configuration
+public class CustomConfiguration{
+
+@Bean
+public FeignClientConfigurer feignClientConfigurer() {
+			return new FeignClientConfigurer() {
+
+				@Override
+				public boolean inheritParentConfiguration() {
+					return false;
+				}
+			};
+
+		}
+}
+----
+
 === Creating Feign Clients Manually
 
 In some cases it might be necessary to customize your Feign Clients in a way that is not
@@ -277,6 +308,9 @@ NOTE: `PROD-SVC` is the name of the service the Clients will be making requests 
 NOTE: The Feign `Contract` object defines what annotations and values are valid on interfaces. The
 autowired `Contract` bean provides supports for SpringMVC annotations, instead of
 the default Feign native annotations.
+
+You can also use the `Builder`to configure FeignClient not to inherit beans from the parent context.
+You can do this by overriding calling `inheritParentContext(false)` on the `Builder`.
 
 [[spring-cloud-feign-hystrix]]
 === Feign Hystrix Support
@@ -423,6 +457,14 @@ feign.compression.request.min-request-size=2048
 
 These properties allow you to be selective about the compressed media types and minimum request threshold length.
 
+For http clients except OkHttpClient, default gzip decoder can be enabled to decode gzip response in UTF-8 encoding:
+
+[source,java]
+----
+feign.compression.response.enabled=true
+feign.compression.response.useGzipDecoder=true
+----
+
 === Feign logging
 
 A logger is created for each Feign client created. By default the name of the logger is the full class name of the interface used to create the Feign client. Feign logging only responds to the `DEBUG` level.
@@ -481,9 +523,81 @@ The following feign client uses the `Params` class by using the `@SpringQueryMap
 [source,java,indent=0]
 ----
 @FeignClient("demo")
-public class DemoTemplate {
+public interface DemoTemplate {
 
     @GetMapping(path = "/demo")
     String demoEndpoint(@SpringQueryMap Params params);
 }
 ----
+
+If you need more control over the generated query parameter map, you can implement a custom `QueryMapEncoder` bean.
+
+=== HATEOAS support
+
+Spring provides some APIs to create REST representations that follow the https://en.wikipedia.org/wiki/HATEOAS[HATEOAS] principle, https://spring.io/projects/spring-hateoas[Spring Hateoas] and https://spring.io/projects/spring-data-rest[Spring Data REST].
+
+If your project use the `org.springframework.boot:spring-boot-starter-hateoas` starter
+or the `org.springframework.boot:spring-boot-starter-data-rest` starter, Feign HATEOAS support is enabled by default.
+
+When HATEOAS support is enabled, Feign clients are allowed to serialize
+and deserialize HATEOAS representation models: https://docs.spring.io/spring-hateoas/docs/1.0.0.M1/apidocs/org/springframework/hateoas/EntityModel.html[EntityModel], https://docs.spring.io/spring-hateoas/docs/1.0.0.M1/apidocs/org/springframework/hateoas/CollectionModel.html[CollectionModel] and https://docs.spring.io/spring-hateoas/docs/1.0.0.M1/apidocs/org/springframework/hateoas/PagedModel.html[PagedModel].
+
+[source,java,indent=0]
+----
+@FeignClient("demo")
+public interface DemoTemplate {
+
+    @GetMapping(path = "/stores")
+    CollectionModel<Store> getStores();
+}
+----
+
+=== Spring @MatrixVariable Support
+
+Spring Cloud OpenFeign provides support for the Spring `@MatrixVariable` annotation.
+
+If a map is passed as the method argument, the `@MatrixVariable` path segment is created by joining key-value pairs from the map with a `=`.
+
+If a different object is passed, either the `name` provided in the `@MatrixVariable` annotation (if defined) or the annotated variable name is
+joined with the provided method argument using `=`.
+
+IMPORTANT:: Even though, on the server side, Spring does not require the users to name the path segment placeholder same as the matrix variable name, since it would be too ambiguous on the client side, Sprig Cloud OpenFeign requires that you add a path segment placeholder with a name matching either the `name` provided in the `@MatrixVariable` annotation (if defined) or the annotated variable name.
+
+For example:
+
+[source,java,indent=0]
+----
+@GetMapping("/objects/links/{matrixVars}")
+Map<String, List<String>> getObjects(@MatrixVariable Map<String, List<String>> matrixVars);
+----
+Note that both variable name and the path segment placeholder are called `matrixVars`.
+
+[source,java,indent=0]
+----
+@FeignClient("demo")
+public interface DemoTemplate {
+
+    @GetMapping(path = "/stores")
+    CollectionModel<Store> getStores();
+}
+----
+
+=== Reactive Support
+As the https://github.com/OpenFeign/feign[OpenFeign project] does not currently support reactive clients, such as https://docs.spring.io/spring/docs/current/javadoc-api/org/springframework/web/reactive/function/client/WebClient.html[Spring WebClient], neither does Spring Cloud OpenFeign. We will add support for it here as soon as it becomes available in the core project.
+
+Until that is done, we recommend using https://github.com/Playtika/feign-reactive[feign-reactive] for Spring WebClient support.
+
+==== Early Initialization Errors
+
+Depending on how you are using your Feign clients you may see initialization errors when starting your application.
+To work around this problem you can use an `ObjectProvider` when autowiring your client.
+
+[source,java,indent=0]
+----
+@Autowired
+ObjectProvider<TestFeginClient> testFeginClient;
+----
+
+== Configuration properties
+
+To see the list of all Sleuth related configuration properties please check link:appendix.html[the Appendix page].

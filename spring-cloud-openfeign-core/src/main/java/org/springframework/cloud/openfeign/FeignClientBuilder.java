@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the original author or authors.
+ * Copyright 2013-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import org.springframework.context.ApplicationContext;
  * {@link FeignClient} annotation.
  *
  * @author Sven Döring
+ * @author Matt King
  */
 public class FeignClientBuilder {
 
@@ -38,6 +39,11 @@ public class FeignClientBuilder {
 		return new Builder<>(this.applicationContext, type, name);
 	}
 
+	public <T> Builder<T> forType(final Class<T> type,
+			final FeignClientFactoryBean clientFactoryBean, final String name) {
+		return new Builder<>(this.applicationContext, clientFactoryBean, type, name);
+	}
+
 	/**
 	 * Builder of feign targets.
 	 *
@@ -49,55 +55,59 @@ public class FeignClientBuilder {
 
 		private Builder(final ApplicationContext applicationContext, final Class<T> type,
 				final String name) {
-			this.feignClientFactoryBean = new FeignClientFactoryBean();
+			this(applicationContext, new FeignClientFactoryBean(), type, name);
+		}
+
+		private Builder(final ApplicationContext applicationContext,
+				final FeignClientFactoryBean clientFactoryBean, final Class<T> type,
+				final String name) {
+			this.feignClientFactoryBean = clientFactoryBean;
 
 			this.feignClientFactoryBean.setApplicationContext(applicationContext);
 			this.feignClientFactoryBean.setType(type);
 			this.feignClientFactoryBean.setName(FeignClientsRegistrar.getName(name));
 			this.feignClientFactoryBean.setContextId(FeignClientsRegistrar.getName(name));
+			this.feignClientFactoryBean.setInheritParentContext(true);
 			// preset default values - these values resemble the default values on the
 			// FeignClient annotation
-			this.url("").path("").decode404(false).fallback(void.class)
-					.fallbackFactory(void.class);
+			this.url("").path("").decode404(false);
 		}
 
-		public Builder url(final String url) {
+		public Builder<T> url(final String url) {
 			this.feignClientFactoryBean.setUrl(FeignClientsRegistrar.getUrl(url));
 			return this;
 		}
 
-		public Builder contextId(final String contextId) {
+		public Builder<T> contextId(final String contextId) {
 			this.feignClientFactoryBean.setContextId(contextId);
 			return this;
 		}
 
-		public Builder path(final String path) {
+		public Builder<T> path(final String path) {
 			this.feignClientFactoryBean.setPath(FeignClientsRegistrar.getPath(path));
 			return this;
 		}
 
-		public Builder decode404(final boolean decode404) {
+		public Builder<T> decode404(final boolean decode404) {
 			this.feignClientFactoryBean.setDecode404(decode404);
 			return this;
 		}
 
-		public Builder fallback(final Class<T> fallback) {
+		public Builder<T> inheritParentContext(final boolean inheritParentContext) {
+			this.feignClientFactoryBean.setInheritParentContext(inheritParentContext);
+			return this;
+		}
+
+		public Builder<T> fallback(final Class<? extends T> fallback) {
 			FeignClientsRegistrar.validateFallback(fallback);
 			this.feignClientFactoryBean.setFallback(fallback);
 			return this;
 		}
 
-		public Builder fallbackFactory(final Class<T> fallbackFactory) {
-			FeignClientsRegistrar.validateFallbackFactory(fallbackFactory);
-			this.feignClientFactoryBean.setFallbackFactory(fallbackFactory);
-			return this;
-		}
-
 		/**
-		 * @param <T> the target type of the Feign client to be created
 		 * @return the created Feign client
 		 */
-		public <T> T build() {
+		public T build() {
 			return this.feignClientFactoryBean.getTarget();
 		}
 

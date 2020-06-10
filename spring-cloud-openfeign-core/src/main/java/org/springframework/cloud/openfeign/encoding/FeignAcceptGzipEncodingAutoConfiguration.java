@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the original author or authors.
+ * Copyright 2013-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,11 +35,12 @@ import org.springframework.context.annotation.Configuration;
  * @author Jakub Narloch
  * @see FeignAcceptGzipEncodingInterceptor
  */
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(FeignClientEncodingProperties.class)
 @ConditionalOnClass(Feign.class)
 @ConditionalOnBean(Client.class)
-@ConditionalOnProperty(value = "feign.compression.response.enabled", matchIfMissing = false)
+@ConditionalOnProperty(value = "feign.compression.response.enabled",
+		matchIfMissing = false)
 // The OK HTTP client uses "transparent" compression.
 // If the accept-encoding header is present it disable transparent compression
 @ConditionalOnMissingBean(type = "okhttp3.OkHttpClient")
